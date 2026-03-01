@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D симулятор проверки автомобильного реле (два реле) — финальная версия</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
+    <style>
+        body { margin:0; overflow:hidden; font-family:Arial,sans-serif; background:linear-gradient(135deg,#2c3e50,#1a1a2e); }
+        canvas {
+            display:block;
+            outline:none;
+            touch-action: none;
+        }
+
+        /* Кнопка полноэкранного режима */
+        #fullscreen-btn {
+            position:absolute;
+            top:20px;
+            right:20px;
+            z-index:300;
+            background:rgba(0,0,0,0.6);
+            color:white;
+            border:none;
+            border-radius:50%;
+            width:50px;
+            height:50px;
+            font-size:24px;
+            cursor:pointer;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            backdrop-filter:blur(4px);
+            border:2px solid rgba(255,255,255,0.3);
+            user-select:none;
+            touch-action: manipulation;
+            transition:background 0.2s;
+        }
+        #fullscreen-btn:active {
+            background:rgba(50,150,255,0.8);
+            transform:scale(0.95);
+        }
+
+        /* Нижняя панель: кнопки слева, информационная панель справа */
+        #bottom-bar {
+            position:absolute;
+            bottom:10px;
+            left:10px;
+            right:10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            z-index:200;
+            pointer-events: none; /* дочерние с auto */
+        }
+        #bottom-bar button {
+            pointer-events: auto;
+            background:#3498db;
+            color:#fff;
+            border:none;
+            padding:10px 20px;
+            border-radius:30px;
+            cursor:pointer;
+            font-weight:bold;
+            font-size:14px;
+            box-shadow:0 4px 8px rgba(0,0,0,0.3);
+            transition:background 0.2s;
+        }
+        #bottom-bar button.reset {
+            background:#e74c3c;
+        }
+        #bottom-bar button.reset:hover {
+            background:#c0392b;
+        }
+        #bottom-bar button.hint:hover {
+            background:#2980b9;
+        }
+
+        /* Информационная панель (справа) */
+        #info-panel {
+            background:rgba(0,0,0,0.8);
+            color:#fff;
+            padding:8px 12px;
+            border-radius:8px;
+            box-shadow:0 4px 12px rgba(0,0,0,0.5);
+            border:1px solid #444;
+            pointer-events: auto;
+            font-size:0.9rem;
+        }
+        #info-panel .status-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: nowrap; /* все в одну строку */
+        }
+        #info-panel .status-item {
+            background:rgba(255,255,255,0.1);
+            padding:4px 8px;
+            border-radius:20px;
+            font-size:0.8rem;
+            white-space: nowrap;
+        }
+        /* Состояния для статуса цепи */
+        #info-panel .status-item.on {
+            background: #2ecc71;
+        }
+        #info-panel .status-item.off {
+            background: #e74c3c;
+        }
+        #info-panel .status-item.faulty {
+            background: #f39c12;
+            color: #000;
+        }
+        #info-panel .status-value {
+            font-weight:bold;
+            margin-left:5px;
+        }
+
+        /* Кнопки управления камерой (зум слева) */
+        #camera-zoom-buttons {
+            position:absolute;
+            left:20px;
+            bottom:160px;
+            display:flex;
+            flex-direction:column;
+            gap:12px;
+            z-index:300;
+            pointer-events: none;
+        }
+        #camera-zoom-buttons button {
+            pointer-events: auto;
+            width:35px;
+            height:35px;
+            border-radius:50%;
+            background:rgba(0,0,0,0.6);
+            border:2px solid rgba(255,255,255,0.3);
+            color:white;
+            font-size:22px;
+            font-weight:bold;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            cursor:pointer;
+            backdrop-filter:blur(4px);
+            transition:background 0.2s, transform 0.1s;
+            box-shadow:0 4px 10px rgba(0,0,0,0.5);
+            user-select:none;
+            touch-action: manipulation;
+        }
+        #camera-zoom-buttons button:active {
+            background:rgba(50,150,255,0.8);
+            transform:scale(0.95);
+        }
+
+        /* Панель перемещения камеры (влево/вправо) */
+        #camera-move-panel {
+            position: absolute;
+            left: 20px;
+            bottom: 60px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 300;
+            pointer-events: none;
+        }
+        #camera-move-panel button {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.7);
+            border: 2px solid rgba(255,255,255,0.4);
+            color: white;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            pointer-events: auto;
+        }
+        #camera-move-panel button:active {
+            background:rgba(50,150,255,0.9);
+            transform:scale(0.95);
+        }
+
+        /* Модальное окно */
+        #modal {
+            position:absolute;
+            top:50%;
+            left:50%;
+            transform:translate(-50%,-50%);
+            background:rgba(30,30,40,0.98);
+            color:#fff;
+            padding:25px;
+            border-radius:20px;
+            box-shadow:0 10px 30px rgba(0,0,0,0.8);
+            z-index:1000;
+            width:85%;
+            max-width:450px;
+            max-height:80vh;
+            overflow-y:auto;
+            text-align:center;
+            backdrop-filter:blur(10px);
+            border:1px solid #555;
+            display:none;
+            pointer-events: auto;
+        }
+        #modal h3 {
+            margin-top:0;
+            color:#ffaa00;
+        }
+        #modal .content {
+            margin:20px 0;
+            line-height:1.6;
+            font-size:16px;
+        }
+        #modal .button-group {
+            display:flex;
+            justify-content:space-around;
+            gap:15px;
+            margin-top:20px;
+        }
+        #modal button {
+            background:#3498db;
+            color:#fff;
+            border:none;
+            padding:14px 20px;
+            border-radius:40px;
+            font-weight:bold;
+            font-size:16px;
+            cursor:pointer;
+            transition:0.2s;
+            flex:1;
+        }
+        #modal button.secondary {
+            background:#555;
+        }
+        #modal button.secondary:hover {
+            background:#666;
+        }
+        #modal button.back {
+            background:#f39c12;
+        }
+        #modal button.back:hover {
+            background:#e67e22;
+        }
+        #modal ul {
+            text-align:left;
+            padding-left:20px;
+        }
+        #modal li {
+            margin:10px 0;
+        }
+
+        /* --- Медиазапрос для мобильных устройств --- */
+        @media (max-width: 768px) {
+            #bottom-bar {
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: 5px;
+            }
+            #info-panel {
+                padding: 4px 8px;
+                font-size: 0.7rem;
+            }
+            #info-panel .status-row {
+                gap: 4px;
+                flex-wrap: wrap; /* на узких экранах перенос */
+            }
+            #info-panel .status-item {
+                padding: 2px 6px;
+                font-size: 0.65rem;
+                white-space: nowrap;
+            }
+            #bottom-bar button {
+                padding: 8px 14px;
+                font-size: 13px;
+            }
+
+            #fullscreen-btn {
+                top: 10px;
+                right: 10px;
+                width: 40px;
+                height: 40px;
+                font-size: 20px;
+            }
+
+            #camera-move-panel {
+                bottom: 10px;
+                left: 10px;
+                gap: 8px;
+            }
+            #camera-move-panel button {
+                width: 44px;
+                height: 44px;
+                font-size: 24px;
+            }
+
+            #camera-zoom-buttons {
+                left: 10px;
+                bottom: 140px;
+                gap: 8px;
+            }
+            #camera-zoom-buttons button {
+                width: 44px;
+                height: 44px;
+                font-size: 26px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Кнопка полноэкранного режима -->
+    <div id="fullscreen-btn" title="Полноэкранный режим">⛶</div>
+
+    <!-- Нижняя панель: кнопки слева, информационная панель справа -->
+    <div id="bottom-bar">
+        <div style="display: flex; gap: 10px;"> <!-- группа кнопок -->
+            <button class="hint" id="show-hint-btn">📋 Подсказка</button>
+            <button class="reset" id="reset-btn">🔄 Сброс</button>
+        </div>
+        <!-- Информационная панель (перемещена сюда) -->
+        <div id="info-panel">
+            <div class="status-row">
+                <div class="status-item">Лампа: <span id="lamp-status" class="status-value">Выкл</span></div>
+                <div class="status-item">Реле 1: <span id="relay1-status" class="status-value">Не активировано</span></div>
+                <div class="status-item">Реле 2: <span id="relay2-status" class="status-value">Не активировано</span></div>
+                <div class="status-item" id="connection-status">Цепь: Не замкнута</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Кнопки зума слева -->
+    <div id="camera-zoom-buttons">
+        <button class="zoom-in" id="cam-zoom-in" title="Приблизить">▲</button>
+        <button class="zoom-out" id="cam-zoom-out" title="Отдалить">▼</button>
+    </div>
+
+    <!-- Нижняя панель управления камерой (влево/вправо) -->
+    <div id="camera-move-panel">
+        <button class="move-left" id="cam-move-left" title="Влево">←</button>
+        <button class="move-right" id="cam-move-right" title="Вправо">→</button>
+    </div>
+
+    <!-- Модальное окно -->
+    <div id="modal">
+        <div id="modal-content"></div>
+        <div id="modal-buttons" class="button-group"></div>
+    </div>
+
+    <script>
+        (function() {
+            // --- Переменные (без изменений) ---
+            let scene, camera, renderer, controls;
+            let battery, lamp;
+            let relay1, relay2;
+            let relay1Light, relay2Light;
+            let lampLight;
+            let clips = [];
+            let wires = [];
+            let activeClip = null;
+            let activeMovable = null;
+            let raycaster, mouse;
+            let isMouseDown = false;
+            let isDragging = false;
+            let isDraggingMovable = false;
+            let isInteracting = false;
+            let dragPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+            let dragOffset = new THREE.Vector3();
+            let intersectPoint = new THREE.Vector3();
+            let hoveredClip = null;
+            let hoveredMovable = null;
+            let hoveredTerminal = null;
+            let originalMaterials = new WeakMap();
+            let originalMovablePos = new THREE.Vector3();
+            let font = null;
+
+            const RELAY1_FAULTY = false;
+            const RELAY2_FAULTY = true;
+
+            const SNAP_DISTANCE = 2.0;
+            const CLIP_SIZE = 0.6;
+            const CLIP_Y_OFFSET = 0.15;
+            const WIRE_THICKNESS = 0.05;
+
+            let zoomInterval = null;
+            let moveInterval = null;
+
+            // --- Классы Clip, Wire (без изменений) ---
+            class Clip {
+                constructor(color, index, endType) {
+                    this.group = new THREE.Group();
+                    this.index = index;
+                    this.endType = endType;
+                    this.color = color;
+                    this.connected = false;
+                    this.connectedTerminal = null;
+                    this.wire = null;
+
+                    const mat = new THREE.MeshPhongMaterial({ color, shininess:100 });
+                    const cube = new THREE.Mesh(new THREE.BoxGeometry(CLIP_SIZE, CLIP_SIZE, CLIP_SIZE), mat);
+                    cube.position.set(0, 0, 0);
+                    cube.userData.isClipPart = true;
+                    this.group.add(cube);
+
+                    if (index === 0) {
+                        if (endType === 'start') this.group.position.set(-5.5, 0.5, -2);
+                        else { this.group.position.set(-5.5, 0.5, -2); this.group.rotation.y = Math.PI; }
+                    } else {
+                        this.group.position.set(-6 + index * 1.5, 0.5, -2);
+                    }
+
+                    this.group.userData = { type: 'clip', clipObject: this };
+                    this.homePos = this.group.position.clone();
+                    scene.add(this.group);
+                }
+                setWire(w) { this.wire = w; }
+                connectToTerminal(term) {
+                    if (this.connectedTerminal) {
+                        const oldTerm = this.connectedTerminal;
+                        const idx = oldTerm.userData.connectedClips.indexOf(this);
+                        if (idx !== -1) oldTerm.userData.connectedClips.splice(idx, 1);
+                    }
+                    this.connected = true;
+                    this.connectedTerminal = term;
+                    const wp = new THREE.Vector3();
+                    term.getWorldPosition(wp);
+                    this.group.position.copy(wp);
+                    this.group.position.y += CLIP_Y_OFFSET;
+                    if (this.wire) this.wire.updateGeometry();
+                }
+                disconnect() {
+                    if (this.connectedTerminal) {
+                        const idx = this.connectedTerminal.userData.connectedClips.indexOf(this);
+                        if (idx !== -1) this.connectedTerminal.userData.connectedClips.splice(idx, 1);
+                    }
+                    this.connected = false;
+                    this.connectedTerminal = null;
+                    this.group.position.copy(this.homePos);
+                    if (this.wire) this.wire.updateGeometry();
+                }
+                highlight() { this.group.traverse(c => { if(c.isMesh) c.material.emissive = new THREE.Color(0x555555); }); }
+                unhighlight() { this.group.traverse(c => { if(c.isMesh) c.material.emissive = new THREE.Color(0x000000); }); }
+            }
+
+            class Wire {
+                constructor(startClip, endClip, color) {
+                    this.startClip = startClip;
+                    this.endClip = endClip;
+                    this.color = color;
+
+                    const geom = new THREE.CylinderGeometry(WIRE_THICKNESS, WIRE_THICKNESS, 1, 8);
+                    const mat = new THREE.MeshPhongMaterial({ color, emissive:0x222222 });
+                    this.mesh = new THREE.Mesh(geom, mat);
+                    this.mesh.userData.type = 'wire';
+                    this.mesh.castShadow = true;
+                    this.mesh.receiveShadow = true;
+
+                    startClip.setWire(this);
+                    endClip.setWire(this);
+
+                    this.updateGeometry();
+                    scene.add(this.mesh);
+                }
+                updateGeometry() {
+                    if (!this.mesh) return;
+                    this.startClip.group.updateMatrixWorld(true);
+                    this.endClip.group.updateMatrixWorld(true);
+                    
+                    const startPos = new THREE.Vector3();
+                    const endPos = new THREE.Vector3();
+                    this.startClip.group.getWorldPosition(startPos);
+                    this.endClip.group.getWorldPosition(endPos);
+
+                    const dist = startPos.distanceTo(endPos);
+                    if (dist < 0.01) {
+                        this.mesh.scale.y = 0.01;
+                        this.mesh.position.copy(startPos);
+                        return;
+                    }
+                    const center = new THREE.Vector3().addVectors(startPos, endPos).multiplyScalar(0.5);
+
+                    this.mesh.position.copy(center);
+                    this.mesh.lookAt(endPos);
+                    this.mesh.rotateX(Math.PI/2);
+                    this.mesh.scale.y = dist;
+                }
+            }
+
+            // --- Инициализация сцены (создание объектов без изменений) ---
+            function init() {
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x1a1a2e);
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                camera.position.set(0,5,12);
+                renderer = new THREE.WebGLRenderer({ antialias:true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMap.enabled = true;
+                document.body.appendChild(renderer.domElement);
+
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+
+                raycaster = new THREE.Raycaster();
+                mouse = new THREE.Vector2();
+
+                const ambient = new THREE.AmbientLight(0x404040, 0.6);
+                scene.add(ambient);
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(10,20,15);
+                dirLight.castShadow = true;
+                scene.add(dirLight);
+
+                const table = new THREE.Mesh(
+                    new THREE.BoxGeometry(20,0.5,20),
+                    new THREE.MeshPhongMaterial({ color:0x8B4513, shininess:30 })
+                );
+                table.position.y = -0.25;
+                table.receiveShadow = true;
+                scene.add(table);
+
+                createBattery();
+                createRelay1();
+                createRelay2();
+                createLamp();
+                createClipsAndWires();
+
+                const loader = new THREE.FontLoader();
+                loader.load('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/fonts/helvetiker_regular.typeface.json',
+                    f => { font = f; addTextLabels(); },
+                    undefined,
+                    e => console.warn('Шрифт не загружен, текст не отображается', e)
+                );
+
+                const grid = new THREE.GridHelper(20,20,0x555555,0x333333);
+                scene.add(grid);
+
+                renderer.domElement.addEventListener('pointerdown', onPointerDown);
+                renderer.domElement.addEventListener('pointermove', onPointerMove);
+                renderer.domElement.addEventListener('pointerup', onPointerUp);
+                renderer.domElement.addEventListener('pointercancel', onPointerUp);
+                renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+
+                document.getElementById('reset-btn').addEventListener('click', resetConnections);
+                document.getElementById('show-hint-btn').addEventListener('click', showHintModal);
+
+                const zoomInBtn = document.getElementById('cam-zoom-in');
+                const zoomOutBtn = document.getElementById('cam-zoom-out');
+                zoomInBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startZoom('in'); });
+                zoomInBtn.addEventListener('pointerup', stopZoom);
+                zoomInBtn.addEventListener('pointerleave', stopZoom);
+                zoomInBtn.addEventListener('pointercancel', stopZoom);
+                zoomOutBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startZoom('out'); });
+                zoomOutBtn.addEventListener('pointerup', stopZoom);
+                zoomOutBtn.addEventListener('pointerleave', stopZoom);
+                zoomOutBtn.addEventListener('pointercancel', stopZoom);
+
+                const moveLeftBtn = document.getElementById('cam-move-left');
+                const moveRightBtn = document.getElementById('cam-move-right');
+
+                moveLeftBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startMove('left'); });
+                moveLeftBtn.addEventListener('pointerup', stopMove);
+                moveLeftBtn.addEventListener('pointerleave', stopMove);
+                moveLeftBtn.addEventListener('pointercancel', stopMove);
+
+                moveRightBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startMove('right'); });
+                moveRightBtn.addEventListener('pointerup', stopMove);
+                moveRightBtn.addEventListener('pointerleave', stopMove);
+                moveRightBtn.addEventListener('pointercancel', stopMove);
+
+                document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
+
+                document.getElementById('modal').addEventListener('click', (e) => e.stopPropagation());
+
+                animate();
+            }
+
+            // --- Функции управления камерой (без изменений) ---
+            function startZoom(direction) {
+                if (zoomInterval) clearInterval(zoomInterval);
+                zoomCamera(direction);
+                zoomInterval = setInterval(() => { zoomCamera(direction); }, 50);
+            }
+            function stopZoom() {
+                if (zoomInterval) { clearInterval(zoomInterval); zoomInterval = null; }
+            }
+            function zoomCamera(direction) {
+                const step = 0.3;
+                const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+                if (direction === 'in') { camera.position.sub(dir.multiplyScalar(step)); }
+                else { camera.position.add(dir.multiplyScalar(step)); }
+                controls.update();
+            }
+            function startMove(direction) {
+                if (moveInterval) clearInterval(moveInterval);
+                moveCamera(direction);
+                moveInterval = setInterval(() => { moveCamera(direction); }, 50);
+            }
+            function stopMove() {
+                if (moveInterval) { clearInterval(moveInterval); moveInterval = null; }
+            }
+            function moveCamera(direction) {
+                const step = 0.3;
+                const lookDir = new THREE.Vector3().subVectors(controls.target, camera.position).normalize();
+                const right = new THREE.Vector3().crossVectors(lookDir, camera.up).normalize();
+                let delta = new THREE.Vector3();
+                if (direction === 'left') { delta.copy(right).multiplyScalar(-step); }
+                else if (direction === 'right') { delta.copy(right).multiplyScalar(step); }
+                camera.position.add(delta);
+                controls.target.add(delta);
+                controls.update();
+            }
+            function toggleFullscreen() {
+                const elem = document.documentElement;
+                if (!document.fullscreenElement) { elem.requestFullscreen().catch(err => console.warn('Fullscreen error:', err)); }
+                else { document.exitFullscreen(); }
+            }
+
+            // --- Создание объектов (полностью без изменений) ---
+            function createBattery() {
+                const g = new THREE.Group();
+                const body = new THREE.Mesh(new THREE.BoxGeometry(2,1,1), new THREE.MeshPhongMaterial({ color:0x222222, shininess:50 }));
+                body.castShadow = true; body.userData.isBody = true; g.add(body);
+                const posTerm = createTerminal(0xff3333);
+                posTerm.position.set(1.2,0.5,0);
+                posTerm.userData = { type:'terminal', label:'battery_plus', connectedClips:[] };
+                g.add(posTerm);
+                const negTerm = createTerminal(0x3366ff);
+                negTerm.position.set(-1.2,0.5,0);
+                negTerm.userData = { type:'terminal', label:'battery_minus', connectedClips:[] };
+                g.add(negTerm);
+                g.position.set(-5,0.5,1.5);
+                g.rotation.y = Math.PI/2;
+                g.position.z += 2;
+                g.userData = { movable:true, type:'movable', label:'battery' };
+                scene.add(g);
+                battery = g;
+            }
+            function createRelay1() {
+                const g = new THREE.Group();
+                const body = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.8,1.5), new THREE.MeshPhongMaterial({ color:0x666666, shininess:70 }));
+                body.castShadow = true; body.userData.isBody = true; g.add(body);
+                const labels = ['85','86','87','30'];
+                const colors = [0x3366ff,0xff3333,0xff3333,0xff3333];
+                const positions = [[-0.5,0.4,-0.5],[0.5,0.4,-0.5],[0.5,0.4,0.5],[-0.5,0.4,0.5]];
+                for(let i=0;i<4;i++){
+                    const cont = createContact(colors[i]);
+                    cont.position.set(positions[i][0], positions[i][1], positions[i][2]);
+                    cont.userData = { type:'terminal', label:'relay1_'+labels[i], connectedClips:[] };
+                    g.add(cont);
+                }
+                relay1Light = new THREE.Mesh(new THREE.SphereGeometry(0.1,16,16), new THREE.MeshBasicMaterial({ color:0x00ff00 }));
+                relay1Light.position.set(0,0.6,0);
+                relay1Light.visible = false;
+                g.add(relay1Light);
+                g.position.set(1.5,0.4,-1);
+                g.userData = { movable:true, type:'movable', label:'relay1' };
+                scene.add(g);
+                relay1 = g;
+            }
+            function createRelay2() {
+                const g = new THREE.Group();
+                const body = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.8,1.5), new THREE.MeshPhongMaterial({ color:0x666666, shininess:70 }));
+                body.castShadow = true; body.userData.isBody = true; g.add(body);
+                const labels = ['85','86','87','30'];
+                const colors = [0x3366ff,0xff3333,0xff3333,0xff3333];
+                const positions = [[-0.5,0.4,-0.5],[0.5,0.4,-0.5],[0.5,0.4,0.5],[-0.5,0.4,0.5]];
+                for(let i=0;i<4;i++){
+                    const cont = createContact(colors[i]);
+                    cont.position.set(positions[i][0], positions[i][1], positions[i][2]);
+                    cont.userData = { type:'terminal', label:'relay2_'+labels[i], connectedClips:[] };
+                    g.add(cont);
+                }
+                relay2Light = new THREE.Mesh(new THREE.SphereGeometry(0.1,16,16), new THREE.MeshBasicMaterial({ color:0x00ff00 }));
+                relay2Light.position.set(0,0.6,0);
+                relay2Light.visible = false;
+                g.add(relay2Light);
+                g.position.set(4.5,0.4,-1);
+                g.userData = { movable:true, type:'movable', label:'relay2' };
+                scene.add(g);
+                relay2 = g;
+            }
+            function createLamp() {
+                const g = new THREE.Group();
+                const base = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.5,32), new THREE.MeshPhongMaterial({ color:0x888888, shininess:100 }));
+                base.castShadow = true; base.receiveShadow = true; base.userData.isBody = true; g.add(base);
+                const bulbMat = new THREE.MeshPhongMaterial({ color:0xffdd88, emissive:0x442200, transparent:true, opacity:0.85, shininess:30 });
+                const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.5,32,32), bulbMat);
+                bulb.position.y = 0.7; bulb.castShadow = true; bulb.receiveShadow = true; bulb.userData.isBody = true; g.add(bulb);
+                const posCont = createContact(0xff3333);
+                posCont.position.set(0.4,-0.2,0);
+                posCont.userData = { type:'terminal', label:'lamp_plus', connectedClips:[] };
+                g.add(posCont);
+                const negCont = createContact(0x3366ff);
+                negCont.position.set(-0.4,-0.2,0);
+                negCont.userData = { type:'terminal', label:'lamp_minus', connectedClips:[] };
+                g.add(negCont);
+                lampLight = new THREE.PointLight(0xffaa44, 0, 100);
+                lampLight.position.set(0,0.7,0);
+                g.add(lampLight);
+                g.position.set(4,0.3,1.5);
+                g.rotation.y = -Math.PI / 4;
+                g.position.z += 2;
+                g.userData = { movable:true, type:'movable', label:'lamp' };
+                scene.add(g);
+                lamp = g;
+            }
+            function createTerminal(color) {
+                const m = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.2,16), new THREE.MeshPhongMaterial({ color, shininess:100 }));
+                m.rotation.x = Math.PI/2;
+                m.castShadow = true;
+                return m;
+            }
+            function createContact(color) {
+                const m = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.15, 16), new THREE.MeshPhongMaterial({ color, shininess:100 }));
+                m.castShadow = true;
+                return m;
+            }
+            function createClipsAndWires() {
+                const colors = [0xff3333, 0xff3333, 0x3366ff, 0x3366ff, 0xff3333];
+                for (let i=0; i<5; i++) {
+                    const start = new Clip(colors[i], i, 'start');
+                    const end = new Clip(colors[i], i, 'end');
+                    const wire = new Wire(start, end, colors[i]);
+                    clips.push(start, end);
+                    wires.push(wire);
+                }
+            }
+            function createText(str, size, color) {
+                if (!font) return new THREE.Group();
+                const geom = new THREE.TextGeometry(str, { font, size, height:0.05, curveSegments:12, bevelEnabled:false });
+                geom.computeBoundingBox();
+                const w = geom.boundingBox.max.x - geom.boundingBox.min.x;
+                const mat = new THREE.MeshBasicMaterial({ color });
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.position.x = -w/2;
+                return mesh;
+            }
+            function addTextLabels() {
+                if (battery) {
+                    const plus = createText('+', 0.2, 0xffffff);
+                    plus.position.set(1.2, 0.9, 0);
+                    battery.add(plus);
+                    const minus = createText('-', 0.2, 0xffffff);
+                    minus.position.set(-1.2, 0.9, 0);
+                    battery.add(minus);
+                }
+                if (relay1) {
+                    const labels = ['85','86','87','30'];
+                    const pos = [[-0.7,0.6,-0.7],[0.7,0.6,-0.7],[0.7,0.6,0.7],[-0.7,0.6,0.7]];
+                    for(let i=0;i<4;i++){
+                        const t = createText(labels[i], 0.15, 0xffffff);
+                        t.position.set(pos[i][0], pos[i][1], pos[i][2]);
+                        t.rotation.x = -0.2;
+                        relay1.add(t);
+                    }
+                    const num1 = createText('1', 0.3, 0xffffff);
+                    num1.position.set(0, 0.7, 0);
+                    relay1.add(num1);
+                }
+                if (relay2) {
+                    const labels = ['85','86','87','30'];
+                    const pos = [[-0.7,0.6,-0.7],[0.7,0.6,-0.7],[0.7,0.6,0.7],[-0.7,0.6,0.7]];
+                    for(let i=0;i<4;i++){
+                        const t = createText(labels[i], 0.15, 0xffffff);
+                        t.position.set(pos[i][0], pos[i][1], pos[i][2]);
+                        t.rotation.x = -0.2;
+                        relay2.add(t);
+                    }
+                    const num2 = createText('2', 0.3, 0xffffff);
+                    num2.position.set(0, 0.7, 0);
+                    relay2.add(num2);
+                }
+                if (lamp) {
+                    const plus = createText('+', 0.15, 0x000000);
+                    plus.position.set(0.4, -0.3, 0);
+                    lamp.add(plus);
+                    const minus = createText('-', 0.15, 0x000000);
+                    minus.position.set(-0.4, -0.3, 0);
+                    lamp.add(minus);
+                }
+            }
+
+            // --- Обработчики событий (без изменений, кроме работы с #connection-status в checkCircuit) ---
+            function onPointerDown(e) {
+                e.preventDefault();
+                if (e.button !== 0) return;
+                mouse.x = (e.clientX/window.innerWidth)*2-1;
+                mouse.y = -(e.clientY/window.innerHeight)*2+1;
+                raycaster.setFromCamera(mouse, camera);
+                scene.updateMatrixWorld(true);
+
+                const clipParts = [];
+                scene.traverse(obj => { if (obj.userData?.isClipPart) clipParts.push(obj); });
+                const clipIntersects = raycaster.intersectObjects(clipParts, true);
+                if (clipIntersects.length) {
+                    let obj = clipIntersects[0].object;
+                    while (obj && !obj.userData.clipObject) obj = obj.parent;
+                    if (obj?.userData.clipObject) {
+                        activeClip = obj.userData.clipObject;
+                        isMouseDown = true;
+                        isInteracting = true;
+                        activeClip.highlight();
+                        dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0), activeClip.group.position);
+                        if (raycaster.ray.intersectPlane(dragPlane, intersectPoint)) {
+                            dragOffset.copy(activeClip.group.position).sub(intersectPoint);
+                        }
+                        if (hoveredClip) { hoveredClip.unhighlight(); hoveredClip = null; }
+                        controls.enabled = false;
+                        return;
+                    }
+                }
+
+                const movables = [];
+                scene.traverse(obj => { if (obj.userData?.movable) movables.push(obj); });
+                const movableIntersects = raycaster.intersectObjects(movables, true);
+                if (movableIntersects.length) {
+                    let obj = movableIntersects[0].object;
+                    while (obj && !obj.userData.movable) obj = obj.parent;
+                    if (obj && obj.userData.movable) {
+                        const hitObj = movableIntersects[0].object;
+                        if (hitObj.userData.isBody || hitObj.parent?.userData?.movable) {
+                            activeMovable = obj;
+                            isMouseDown = true;
+                            isInteracting = true;
+                            isDraggingMovable = true;
+                            originalMovablePos.copy(obj.position);
+                            highlightMovable(obj);
+                            dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0), obj.position);
+                            if (raycaster.ray.intersectPlane(dragPlane, intersectPoint)) {
+                                dragOffset.copy(obj.position).sub(intersectPoint);
+                            }
+                            controls.enabled = false;
+                        }
+                    }
+                }
+            }
+
+            function onPointerMove(e) {
+                if (isInteracting) e.preventDefault();
+                mouse.x = (e.clientX/window.innerWidth)*2-1;
+                mouse.y = -(e.clientY/window.innerHeight)*2+1;
+                raycaster.setFromCamera(mouse, camera);
+
+                if (isMouseDown && isInteracting && activeClip) {
+                    isDragging = true;
+                    if (raycaster.ray.intersectPlane(dragPlane, intersectPoint)) {
+                        activeClip.group.position.copy(intersectPoint.add(dragOffset));
+                        if (activeClip.group.position.y < 0.2) activeClip.group.position.y = 0.2;
+                        if (activeClip.wire) activeClip.wire.updateGeometry();
+                    }
+                    highlightNearbyTerminals(activeClip);
+                    return;
+                }
+
+                if (isMouseDown && isInteracting && activeMovable) {
+                    if (raycaster.ray.intersectPlane(dragPlane, intersectPoint)) {
+                        const newPos = intersectPoint.add(dragOffset);
+                        newPos.y = originalMovablePos.y;
+                        activeMovable.position.copy(newPos);
+                        updateAttachedClips(activeMovable);
+                        updateWiresForComponent(activeMovable);
+                    }
+                    return;
+                }
+
+                checkClipHover();
+                if (!hoveredClip) checkMovableHover();
+                else if (hoveredMovable) { unhighlightMovable(hoveredMovable); hoveredMovable = null; }
+            }
+
+            function onPointerUp(e) {
+                if (e.button !== 0) return;
+                if (isInteracting && activeClip) {
+                    snapToNearestTerminal(activeClip);
+                } else if (activeMovable) {
+                    isDraggingMovable = false;
+                    unhighlightMovable(activeMovable);
+                    updateAttachedClips(activeMovable);
+                    updateWiresForComponent(activeMovable);
+                    activeMovable = null;
+                    checkCircuit();
+                }
+                resetAllTerminalsHighlight();
+                isMouseDown = false;
+                isDragging = false;
+                isInteracting = false;
+                if (activeClip) { activeClip.unhighlight(); activeClip = null; }
+                controls.enabled = true;
+            }
+
+            // --- Функции подсветки и притягивания (без изменений) ---
+            function highlightNearbyTerminals(clip) {
+                resetAllTerminalsHighlight();
+                const terms = [];
+                scene.traverse(obj => { if (obj.userData?.type === 'terminal') terms.push(obj); });
+                const clipPos = new THREE.Vector3();
+                clip.group.getWorldPosition(clipPos);
+                terms.forEach(term => {
+                    if (term.material.color.getHex() === clip.color) {
+                        const termPos = new THREE.Vector3();
+                        term.getWorldPosition(termPos);
+                        const dist = clipPos.distanceTo(termPos);
+                        if (dist < SNAP_DISTANCE) {
+                            if (!originalMaterials.has(term)) originalMaterials.set(term, term.material.clone());
+                            term.material.emissive = new THREE.Color(0x00ff00);
+                        }
+                    }
+                });
+            }
+            function resetAllTerminalsHighlight() {
+                scene.traverse(obj => {
+                    if (obj.userData?.type === 'terminal') {
+                        if (originalMaterials.has(obj)) { obj.material.emissive = new THREE.Color(0x000000); }
+                    }
+                });
+            }
+            function snapToNearestTerminal(clip) {
+                const terms = [];
+                scene.traverse(obj => { if (obj.userData?.type === 'terminal') terms.push(obj); });
+                const clipPos = new THREE.Vector3();
+                clip.group.getWorldPosition(clipPos);
+                let nearestTerm = null;
+                let minDist = Infinity;
+                terms.forEach(term => {
+                    if (term.material.color.getHex() === clip.color) {
+                        const termPos = new THREE.Vector3();
+                        term.getWorldPosition(termPos);
+                        const dist = clipPos.distanceTo(termPos);
+                        if (dist < minDist && dist < SNAP_DISTANCE) {
+                            minDist = dist;
+                            nearestTerm = term;
+                        }
+                    }
+                });
+                if (nearestTerm) {
+                    const isOccupied = !nearestTerm.userData.label.startsWith('battery_') && nearestTerm.userData.connectedClips.length > 0;
+                    if (!isOccupied) {
+                        clip.connectToTerminal(nearestTerm);
+                        nearestTerm.userData.connectedClips.push(clip);
+                    } else {
+                        clip.disconnect();
+                    }
+                } else {
+                    clip.disconnect();
+                }
+                checkCircuit();
+            }
+            function checkClipHover() {
+                const clipParts = [];
+                scene.traverse(obj => { if (obj.userData?.isClipPart) clipParts.push(obj); });
+                scene.updateMatrixWorld(true);
+                const intersects = raycaster.intersectObjects(clipParts, true);
+                if (hoveredClip) { hoveredClip.unhighlight(); hoveredClip = null; renderer.domElement.style.cursor = 'auto'; }
+                if (intersects.length && !isInteracting) {
+                    let obj = intersects[0].object;
+                    while (obj && !obj.userData.clipObject) obj = obj.parent;
+                    if (obj?.userData.clipObject) {
+                        hoveredClip = obj.userData.clipObject;
+                        hoveredClip.highlight();
+                        renderer.domElement.style.cursor = 'pointer';
+                    }
+                }
+            }
+            function checkMovableHover() {
+                const movables = [];
+                scene.traverse(obj => { if (obj.userData?.movable) movables.push(obj); });
+                const intersects = raycaster.intersectObjects(movables, true);
+                if (hoveredMovable) { unhighlightMovable(hoveredMovable); hoveredMovable = null; renderer.domElement.style.cursor = 'auto'; }
+                if (intersects.length && !isInteracting) {
+                    const hitObj = intersects[0].object;
+                    if (hitObj.userData.isBody || hitObj.parent?.userData?.movable) {
+                        let obj = hitObj;
+                        while (obj && !obj.userData.movable) obj = obj.parent;
+                        if (obj) {
+                            hoveredMovable = obj;
+                            highlightMovable(obj);
+                            renderer.domElement.style.cursor = 'move';
+                        }
+                    }
+                }
+            }
+            function highlightMovable(obj) {
+                obj.traverse(c => {
+                    if (c.userData.isBody && c.material && c.material.emissive !== undefined) {
+                        if (!originalMaterials.has(c)) originalMaterials.set(c, c.material);
+                        if (Array.isArray(c.material)) {
+                            c.material.forEach(m => { if (m.emissive) m.emissive = new THREE.Color(0x333333); });
+                        } else {
+                            c.material.emissive = new THREE.Color(0x333333);
+                        }
+                    }
+                });
+            }
+            function unhighlightMovable(obj) {
+                obj.traverse(c => {
+                    if (c.userData.isBody && c.material && originalMaterials.has(c)) {
+                        if (Array.isArray(c.material)) {
+                            c.material.forEach(m => { if (m.emissive) m.emissive = new THREE.Color(0x000000); });
+                        } else {
+                            c.material.emissive = new THREE.Color(0x000000);
+                        }
+                    }
+                });
+            }
+            function updateAttachedClips(comp) {
+                const terms = [];
+                comp.traverse(c => { if (c.userData?.type === 'terminal') terms.push(c); });
+                terms.forEach(term => {
+                    (term.userData.connectedClips || []).forEach(clip => {
+                        const wp = new THREE.Vector3();
+                        term.getWorldPosition(wp);
+                        clip.group.position.copy(wp);
+                        clip.group.position.y += CLIP_Y_OFFSET;
+                    });
+                });
+            }
+            function updateWiresForComponent(comp) {
+                const terms = [];
+                comp.traverse(c => { if (c.userData?.type === 'terminal') terms.push(c); });
+                const affected = new Set();
+                terms.forEach(term => {
+                    (term.userData.connectedClips || []).forEach(clip => { if (clip.wire) affected.add(clip.wire); });
+                });
+                affected.forEach(w => w.updateGeometry());
+            }
+
+            // --- Логика проверки цепи (ИЗМЕНЕНА работа с #connection-status) ---
+            function checkCircuit() {
+                document.getElementById('lamp-status').textContent = 'Выкл';
+                document.getElementById('lamp-status').className = 'status-value off';
+                document.getElementById('relay1-status').textContent = 'Не активировано';
+                document.getElementById('relay2-status').textContent = 'Не активировано';
+                if (lampLight) lampLight.intensity = 0;
+                if (relay1Light) relay1Light.visible = false;
+                if (relay2Light) relay2Light.visible = false;
+
+                const terms = {};
+                scene.traverse(obj => { if (obj.userData?.type === 'terminal' && obj.userData.label) terms[obj.userData.label] = obj; });
+
+                const batP = terms['battery_plus'];
+                const batM = terms['battery_minus'];
+                const lampP = terms['lamp_plus'];
+                const lampM = terms['lamp_minus'];
+                const r1_85 = terms['relay1_85'];
+                const r1_86 = terms['relay1_86'];
+                const r1_87 = terms['relay1_87'];
+                const r1_30 = terms['relay1_30'];
+                const r2_85 = terms['relay2_85'];
+                const r2_86 = terms['relay2_86'];
+                const r2_87 = terms['relay2_87'];
+                const r2_30 = terms['relay2_30'];
+
+                // Прямое подключение
+                if (checkConnection(batP, lampP) && checkConnection(batM, lampM)) {
+                    setConnectionStatus('Прямое подключение (минуя реле)', 'on');
+                    document.getElementById('lamp-status').textContent = 'Вкл';
+                    document.getElementById('lamp-status').className = 'status-value on';
+                    if (lampLight) lampLight.intensity = 1;
+                    return;
+                }
+
+                // Проверка активации реле 1
+                const relay1Energized = (checkConnection(batP, r1_86) && checkConnection(batM, r1_85)) || 
+                                         (checkConnection(batP, r1_85) && checkConnection(batM, r1_86));
+                const lampViaRelay1 = checkConnection(batP, r1_30) && checkConnection(r1_87, lampP) && checkConnection(batM, lampM);
+
+                // Проверка активации реле 2
+                const relay2Energized = (checkConnection(batP, r2_86) && checkConnection(batM, r2_85)) || 
+                                         (checkConnection(batP, r2_85) && checkConnection(batM, r2_86));
+                const lampViaRelay2 = checkConnection(batP, r2_30) && checkConnection(r2_87, lampP) && checkConnection(batM, lampM);
+
+                if (relay1Energized) {
+                    if (lampViaRelay1) {
+                        document.getElementById('relay1-status').textContent = 'Активировано (исправно)';
+                        relay1Light.visible = true;
+                    } else {
+                        document.getElementById('relay1-status').textContent = 'Активировано';
+                        relay1Light.visible = true;
+                    }
+                } else {
+                    document.getElementById('relay1-status').textContent = 'Не активировано';
+                    relay1Light.visible = false;
+                }
+
+                if (relay2Energized) {
+                    if (lampViaRelay2) {
+                        document.getElementById('relay2-status').textContent = 'Активировано (неисправно)';
+                        relay2Light.visible = true;
+                    } else {
+                        document.getElementById('relay2-status').textContent = 'Активировано';
+                        relay2Light.visible = true;
+                    }
+                } else {
+                    document.getElementById('relay2-status').textContent = 'Не активировано';
+                    relay2Light.visible = false;
+                }
+
+                let lampOn = false;
+                let circuitDesc = '';
+
+                if (lampViaRelay1 && relay1Energized) {
+                    if (!RELAY1_FAULTY) {
+                        lampOn = true;
+                        circuitDesc = 'Через исправное реле 1';
+                    } else {
+                        circuitDesc = 'Реле 1 неисправно (не замыкает)';
+                    }
+                } else if (lampViaRelay2 && relay2Energized) {
+                    if (!RELAY2_FAULTY) {
+                        lampOn = true;
+                        circuitDesc = 'Через реле 2 (исправно)';
+                    } else {
+                        circuitDesc = 'Реле 2 неисправно (контакты обгорели)';
+                    }
+                } else {
+                    circuitDesc = 'Цепь не замкнута или подключена неправильно';
+                }
+
+                if (lampOn) {
+                    document.getElementById('lamp-status').textContent = 'Вкл';
+                    document.getElementById('lamp-status').className = 'status-value on';
+                    if (lampLight) lampLight.intensity = 1;
+                    setConnectionStatus(circuitDesc + ' ✓', 'on');
+                } else {
+                    document.getElementById('lamp-status').textContent = 'Выкл';
+                    document.getElementById('lamp-status').className = 'status-value off';
+                    if (lampLight) lampLight.intensity = 0;
+                    const stateClass = (relay1Energized || relay2Energized) ? 'faulty' : 'off';
+                    setConnectionStatus(circuitDesc, stateClass);
+                }
+            }
+
+            // Вспомогательная функция для обновления статуса цепи
+            function setConnectionStatus(text, className) {
+                const el = document.getElementById('connection-status');
+                el.innerHTML = 'Цепь: ' + text;
+                el.classList.remove('on', 'off', 'faulty');
+                el.classList.add(className);
+            }
+
+            function checkConnection(a, b) {
+                if (!a || !b) return false;
+                for (let clip of a.userData.connectedClips) {
+                    if (clip.wire) {
+                        const other = clip.wire.startClip === clip ? clip.wire.endClip : clip.wire.startClip;
+                        if (other.connectedTerminal === b) return true;
+                    }
+                }
+                return false;
+            }
+
+            function resetConnections() {
+                scene.traverse(obj => { if (obj.userData?.type === 'terminal' && obj.userData.connectedClips) obj.userData.connectedClips = []; });
+                clips.forEach(c => c.disconnect());
+                checkCircuit();
+            }
+
+            function showHintModal() {
+                document.getElementById('modal').style.display = 'block';
+                showInstructionScreen();
+            }
+
+            function showInstructionScreen() {
+                const content = document.getElementById('modal-content');
+                const buttons = document.getElementById('modal-buttons');
+                content.innerHTML = `
+                    <h3>📘 Инструкция</h3>
+                    <ul>
+                        <li>Коснитесь зажима, чтобы захватить его</li>
+                        <li>Удерживая, перетащите к нужной клемме (зажим движется по столу)</li>
+                        <li>При отпускании зажим сам притянется к ближайшей подходящей клемме (зелёная подсветка)</li>
+                        <li>К клеммам аккумулятора можно подключать несколько зажимов</li>
+                        <li>Коснитесь корпуса реле, лампы или аккумулятора и перетащите, чтобы переместить</li>
+                        <li><strong>Реле 1 — исправно</strong> (катушка и контакты работают)</li>
+                        <li><strong>Реле 2 — неисправно</strong> (катушка исправна, контакты обгорели)</li>
+                        <li><em>Управление камерой: кнопки слева — зум, кнопки внизу (← →) — панорамирование.</em></li>
+                    </ul>
+                `;
+                buttons.innerHTML = `
+                    <button class="secondary" id="modal-schema-btn">🔌 Схема подключения</button>
+                    <button id="modal-start-btn">▶ Начать</button>
+                `;
+                document.getElementById('modal-schema-btn').addEventListener('click', showSchemaScreen);
+                document.getElementById('modal-start-btn').addEventListener('click', () => {
+                    document.getElementById('modal').style.display = 'none';
+                });
+            }
+
+            function showSchemaScreen() {
+                const content = document.getElementById('modal-content');
+                const buttons = document.getElementById('modal-buttons');
+                content.innerHTML = `
+                    <h3>🔌 Схема подключения реле</h3>
+                    <p style="text-align:left;">
+                        <strong>Контакты реле:</strong><br>
+                        • <span style="color:#ff6666;">86</span> и <span style="color:#6666ff;">85</span> — питание катушки (полярность не важна, но обычно 86 на +, 85 на -)<br>
+                        • <span style="color:#ff6666;">30</span> — общий контакт (питание от аккумулятора)<br>
+                        • <span style="color:#ff6666;">87</span> — нормально разомкнутый (питание нагрузки, когда реле включено)<br><br>
+                        <strong>Правильное подключение для проверки:</strong><br>
+                        1. Питание катушки: + аккумулятора на 86, - аккумулятора на 85<br>
+                        2. Питание нагрузки: + аккумулятора на 30, лампа между 87 и минусом<br>
+                        3. При подаче питания на катушку исправного реле лампа загорается<br>
+                        <strong style="color:#ff6666;">Неисправное реле (№2) имеет обгоревшие контакты — лампа не загорится, хотя катушка сработает (светодиод на реле зажжётся).</strong>
+                    </p>
+                `;
+                buttons.innerHTML = `
+                    <button class="back" id="modal-back-btn">◀ Назад</button>
+                    <button class="secondary" id="modal-start-btn2">▶ Начать</button>
+                `;
+                document.getElementById('modal-back-btn').addEventListener('click', showInstructionScreen);
+                document.getElementById('modal-start-btn2').addEventListener('click', () => {
+                    document.getElementById('modal').style.display = 'none';
+                });
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+
+            window.addEventListener('load', init);
+            window.addEventListener('resize', ()=>{
+                if (camera && renderer) {
+                    camera.aspect = window.innerWidth/window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
